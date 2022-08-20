@@ -7,72 +7,116 @@ const request = require("superagent");
 const fs = require("fs");
 const admZip = require("adm-zip");
 const path = require("path");
-const fse = require('fs-extra');
-const version = "0.1"
+const fse = require("fs-extra");
 
-const checkVersion = ()=> version
+let temppath = path.join(
+  __dirname,
+  "..",
+  "DAVAProject",
+  "dynamic_content_version.txt"
+);
+if (!fs.existsSync(temppath))
+  temppath = path.join(
+    __dirname,
+    "..",
+    "..",
+    "DAVAProject",
+    "dynamic_content_version.txt"
+  );
+if (!fs.existsSync(temppath)) {
+  throw Error(
+    "Please check if this ModMenu is installed in the correct folder."
+  );
+}
+const isPacks = fs.readFileSync(temppath, "utf-8") !== "0";
+const backup = path.join(__dirname, "backup");
+let dirpath;
 
-const backup = path.join(__dirname,"backup")
-let dirpath = path.join(__dirname, "..", "packs");
-    if (!fs.existsSync(dirpath)) {
-      dirpath = path.join(__dirname,'..','..',"packs")
+const runFirst = async () => {
+  dirpath = isPacks
+    ? path.join(__dirname, "..", "packs")
+    : path.join(fs.readFileSync("rootpath.txt", "utf-8"));
+  if (!fs.existsSync(dirpath)) {
+    if (isPacks) {
+      dirpath = path.join(__dirname, "..", "..", "packs");
+      await main();
+    } else {
+      await checkRoot();
     }
+  } else await main();
+};
+async function handleCheck(answer) {
+  if (!fs.existsSync(path.join(answer))) {
+    console.log("Please make sure you entered the full and correct path.");
+    await checkRoot();
+  } else {
+    fs.writeFileSync("rootpath.txt", path.join(answer, "data"));
+    dirpath = path.join(answer, "Data");
+    await main();
+  }
+}
+
+async function checkRoot() {
+  readline.question(
+    "WoTB installation folder was not found, please specify where it's installed. For example: 'C:/Program Files (x86)/Steam/steamapps/common/World of Tanks Blitz'  : ",
+    handleCheck
+  );
+}
 
 async function checkBackup(dirpath) {
   try {
-  if (!fs.existsSync(backup)) {
-    console.log("Creating back-up")
-    fs.mkdirSync(backup)
-    fse.copySync(dirpath,backup)
-  } 
+    if (!fs.existsSync(backup)) {
+      console.log("Creating back-up");
+      fs.mkdirSync(backup);
+      fse.copySync(dirpath, backup);
+    }
   } catch (err) {
-    console.log("Something went wrong with backup")
+    console.log("Something went wrong with backup");
   }
 }
 async function reset(isHard) {
-  console.log("Resetting WoTB...")
-  fs.rmSync(dirpath,{ recursive: true, force: true })
-  if (isHard) fs.rmSync(backup,{ recursive: true, force: true })
-  else if (fs.existsSync(backup)) fse.copySync(backup,dirpath,{overwrite: true})
+  console.log("Resetting WoTB...");
+  fs.rmSync(dirpath, { recursive: true, force: true });
+  if (isHard) fs.rmSync(backup, { recursive: true, force: true });
+  else if (fs.existsSync(backup))
+    fse.copySync(backup, dirpath, { overwrite: true });
 }
 
 const recursiveReplacer = async (download, game) => {
-  const list = fs.readdirSync(download)
+  const list = fs.readdirSync(download);
   if (list.includes("script.js")) {
     try {
-      const {main} = require('./download/script.js')
-      await main(download,game)
+      const { main } = require("./download/script.js");
+      await main(download, game);
     } catch (error) {
-      console.log(error)
+      console.log(error);
     }
   } else {
-  list.forEach((file) => {
-    const newpath = path.join(download, file);
-    const gamepath = path.join(game, file);
-    if (file.substring(file.lastIndexOf(".")) !== ".zip") {
-      if (!fs.lstatSync(newpath).isDirectory()) {
-        fs.copyFileSync(newpath, gamepath);
-      } else {
-        if (!fs.existsSync(gamepath)) fs.mkdirSync(gamepath)
-        recursiveReplacer(newpath, gamepath);
+    list.forEach((file) => {
+      const newpath = path.join(download, file);
+      const gamepath = path.join(game, file);
+      if (file.substring(file.lastIndexOf(".")) !== ".zip") {
+        if (!fs.lstatSync(newpath).isDirectory()) {
+          fs.copyFileSync(newpath, gamepath);
+        } else {
+          if (!fs.existsSync(gamepath)) fs.mkdirSync(gamepath);
+          recursiveReplacer(newpath, gamepath);
+        }
       }
-    }
-  });
-}
+    });
+  }
 };
 
 const code = async (code) => {
   if (code === "reset") {
-    await reset(false)
-    console.log("backup was applied")
-    await main()
-  } 
-  else if (code === "hardreset") {
-    await reset(true)
-    console.log("backup erased and WoTB reset")
-    await main()
-  } 
-  else {
+    await reset(false);
+    console.log("backup was applied");
+    await main();
+  } else if (code === "hardreset") {
+    await reset(true);
+    console.log("backup erased and WoTB reset");
+    await main();
+  } else {
     try {
       var { data } = await axios.get(
         `https://wotbmodmenu.herokuapp.com/api/code/${code}`
@@ -85,13 +129,10 @@ const code = async (code) => {
           obj.version === null ? "" : "| Made for version: " + obj.version
         }`
       );
-      readline.question(
-        "\nIs this the mod you want? y/n: ",
-        async (answer) => {
-          if (answer === "y") await install(obj.code, true);
-          else await main();
-        }
-      );
+      readline.question("\nIs this the mod you want? y/n: ", async (answer) => {
+        if (answer === "y") await install(obj.code, true);
+        else await main();
+      });
     } else {
       console.log("Code not found");
       await main();
@@ -105,17 +146,25 @@ const choice = async (number) => {
     await main();
   } else if (number > 0) await install(number, false);
   else {
-    console.log("Don't bother guessing codes, the chance of guessing one is so much smaller than getting a tank from a crate.\n")
+    console.log(
+      "Don't bother guessing codes, the chance of guessing one is so much smaller than getting a tank from a crate.\n"
+    );
     readline.question("Enter your special code: ", code);
   }
 };
-let first = true
+let first = true;
 const main = async () => {
   if (first) {
-    console.log("To see updates regarding mods or the menu itself and to contact the creators of the mods, join the server:\nhttps://discord.gg/YAjUgVX")
-  console.log("If a version of WoTB is specified with a mod and it's outdated, it will most likely cause game crashes.")
-  console.log("If you encounter any issues with a mod or the modmenu itself, contact Blitzhax.")
-  first = false
+    console.log(
+      "To see updates regarding mods or the menu itself and to contact the creators of the mods, join the server:\nhttps://discord.gg/YAjUgVX"
+    );
+    console.log(
+      "If a version of WoTB is specified with a mod and it's outdated, it will most likely cause game crashes."
+    );
+    console.log(
+      "If you encounter any issues with a mod or the modmenu itself, contact Blitzhax."
+    );
+    first = false;
   }
   console.log("Getting mod list...");
   const { data } = await axios.get(
@@ -129,11 +178,8 @@ const main = async () => {
       }`
     );
   });
-  readline.question(
-    "Enter the number of the option you want: ",
-    choice
-  );
-}
+  readline.question("Enter the number of the option you want: ", choice);
+};
 async function install(number, isCode) {
   console.log("Getting download link...");
   let url;
@@ -145,11 +191,11 @@ async function install(number, isCode) {
     );
     url = data[0].url;
   } catch (error) {
-    console.log("Incorrect input"); 
+    console.log("Incorrect input");
   }
   if (!url) main();
   else {
-    await checkBackup(dirpath)
+    await checkBackup(dirpath);
     const downloadpath = path.join(__dirname, "download");
     try {
       if (!fs.existsSync(downloadpath)) fs.mkdirSync(downloadpath);
@@ -190,6 +236,5 @@ async function install(number, isCode) {
   }
 }
 module.exports = {
-  main,
-  checkVersion
-}
+  runFirst,
+};
