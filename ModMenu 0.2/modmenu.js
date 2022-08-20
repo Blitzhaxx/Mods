@@ -65,7 +65,7 @@ async function checkRoot() {
 
 async function checkBackup(dirpath) {
   try {
-    if (!fs.existsSync(backup)) {
+    if (!fs.existsSync(backup) && isPacks) {
       console.log("Creating back-up");
       fs.mkdirSync(backup);
       fse.copySync(dirpath, backup);
@@ -75,11 +75,19 @@ async function checkBackup(dirpath) {
   }
 }
 async function reset(isHard) {
-  console.log("Resetting WoTB...");
-  fs.rmSync(dirpath, { recursive: true, force: true });
-  if (isHard) fs.rmSync(backup, { recursive: true, force: true });
-  else if (fs.existsSync(backup))
-    fse.copySync(backup, dirpath, { overwrite: true });
+  if (isPacks) {
+    console.log("Resetting WoTB...");
+    fs.rmSync(dirpath, { recursive: true, force: true });
+    if (isHard) fs.rmSync(backup, { recursive: true, force: true });
+    else if (fs.existsSync(backup))
+      fse.copySync(backup, dirpath, { overwrite: true });
+    console.log("Game was reset");
+    await main();
+  } else {
+    console.log(
+      '   Micropatch inactive, no manual backup was created.\n \n      CLOSE YOUR GAME! Open Steam, go to WoTB in your library. Click the settings icon and go to "Properties...".\n      Go to "LOCAL FILES" and select "Verify integrity of the game files...".\n      Let Steam redownload the original files.'
+    );
+  }
 }
 
 const recursiveReplacer = async (download, game) => {
@@ -110,12 +118,8 @@ const recursiveReplacer = async (download, game) => {
 const code = async (code) => {
   if (code === "reset") {
     await reset(false);
-    console.log("backup was applied");
-    await main();
   } else if (code === "hardreset") {
     await reset(true);
-    console.log("backup erased and WoTB reset");
-    await main();
   } else {
     try {
       var { data } = await axios.get(
